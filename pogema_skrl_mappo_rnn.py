@@ -25,7 +25,8 @@ env = pogema_v0(
         size=20,
         density=0.1,
         num_agents=3,
-        max_episode_steps=80,
+        max_episode_steps=200,
+        # on_target = 'nothing',
     ),
     render_mode=None
 )
@@ -187,8 +188,8 @@ cfg["shared_state_preprocessor"] = None
 
 # ✅ Set up logging & checkpoints
 cfg["experiment"]["directory"] = "runs/torch/Pogema_MAPPO_CNN_RNN"
-cfg["experiment"]["write_interval"] = 5000
-cfg["experiment"]["checkpoint_interval"] = 50000
+cfg["experiment"]["write_interval"] = 50000
+cfg["experiment"]["checkpoint_interval"] = 200000
 
 agent = MAPPO_CNN_RNN(
     possible_agents=env.possible_agents,
@@ -202,7 +203,7 @@ agent = MAPPO_CNN_RNN(
 )
 
 # 🏋️ Configure & Start Training
-cfg_trainer = {"timesteps": 1000000, "headless": True}
+cfg_trainer = {"timesteps": 3000000, "headless": True}
 trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent)
 
 print("🚀 Starting MAPPO RNN Training...")

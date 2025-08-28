@@ -1,12 +1,11 @@
-// {
-//     "python.analysis.extraPaths": [
-//       "C:/Users/billy/RL/multigrid",
-//       "C:/Users/billy/RL/SKRL"
-//     ]
-// }
-
 {
-  "python.analysis.extraPaths": [
-    "/Users/shengkangchen/Documents/SKRL"
-  ]
+    "python.analysis.extraPaths": [
+      "C:/Users/billy/RL/SKRL"
+    ]
 }
+
+// {
+//   "python.analysis.extraPaths": [
+//     "/Users/shengkangchen/Documents/SKRL"
+//   ]
+// }

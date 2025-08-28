@@ -18,6 +18,7 @@ set_seed(42)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
+
 # 🧠 Setup Pogema environment
 env = pogema_v0(
     GridConfig(

@@ -12,7 +12,7 @@ from skrl.models.torch import CategoricalMixin, DeterministicMixin, Model
 from skrl.utils import set_seed
 
 # Set reproducible seed
-set_seed(42)
+# set_seed(42)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -23,7 +23,8 @@ env = pogema_v0(
         size=20,
         density=0.1,
         num_agents=3,
-        max_episode_steps=50,
+        max_episode_steps=200,
+        # on_target = 'nothing',
     ),
     render_mode=None
 )
@@ -31,10 +32,6 @@ env = pogema_v0(
 env = AnimationMonitor(env)
 env = wrap_env(env, wrapper="pogema")  # Wrap for SKRL compatibility
 obs, _ = env.reset()
-
-
-# 🧠 Define Policy and Value Models with RNNs
-# These definitions must match the architecture of your trained model
 
 class CNNFeatureExtractor(nn.Module):
     def __init__(self, input_shape, output_dim=256):
@@ -57,8 +54,9 @@ class CNNFeatureExtractor(nn.Module):
     def forward(self, x):
         return self.linear(self.cnn(x))
 
+# CHANGED: Corrected Policy model with proper sequence handling during training
 class Policy(CategoricalMixin, Model):
-    def __init__(self, observation_space, action_space, device, num_envs=1, num_rnn_layers=1, hidden_size=256, sequence_length=64):
+    def __init__(self, observation_space, action_space, device, num_envs=1, num_rnn_layers=1, hidden_size=128, sequence_length=64):
         Model.__init__(self, observation_space, action_space, device)
         CategoricalMixin.__init__(self)
 
@@ -67,9 +65,9 @@ class Policy(CategoricalMixin, Model):
         self.hidden_size = hidden_size
         self.sequence_length = sequence_length
 
-        self.feature_extractor = CNNFeatureExtractor(observation_space, output_dim=256)
+        self.feature_extractor = CNNFeatureExtractor(observation_space, output_dim=128)
         self.rnn = nn.GRU(
-            input_size=256,
+            input_size=128,
             hidden_size=self.hidden_size,
             num_layers=self.num_rnn_layers,
             batch_first=True
@@ -86,13 +84,31 @@ class Policy(CategoricalMixin, Model):
     def compute(self, inputs, role):
         features = self.feature_extractor(inputs["states"])
         hidden_states = inputs["rnn"][0]
-        rnn_input = features.view(-1, 1, features.shape[-1])
-        rnn_output, new_hidden_states = self.rnn(rnn_input, hidden_states)
-        logits = self.policy_net(rnn_output.squeeze(1))
+
+        # Training mode: process full sequences
+        if self.training:
+            # Reshape features to (batch_size, sequence_length, feature_size)
+            rnn_input = features.view(-1, self.sequence_length, features.shape[-1])
+            # Reshape hidden states to (num_layers, batch_size, hidden_size)
+            # We only need the hidden state from the start of the sequence
+            hidden_states = hidden_states.view(self.num_rnn_layers, -1, self.sequence_length, self.hidden_size)
+            hidden_states = hidden_states[:, :, 0, :].contiguous()
+            
+            rnn_output, new_hidden_states = self.rnn(rnn_input, hidden_states)
+            # Reshape output back to (batch_size * sequence_length, hidden_size)
+            rnn_output = torch.flatten(rnn_output, start_dim=0, end_dim=1)
+        # Evaluation/Rollout mode: process one step at a time
+        else:
+            rnn_input = features.view(-1, 1, features.shape[-1])
+            rnn_output, new_hidden_states = self.rnn(rnn_input, hidden_states)
+            rnn_output = rnn_output.squeeze(1)
+
+        logits = self.policy_net(rnn_output)
         return logits, {"rnn": [new_hidden_states]}
 
+# CHANGED: Corrected Value model with proper sequence handling during training
 class Value(DeterministicMixin, Model):
-    def __init__(self, observation_space, action_space, device, num_envs=1, num_rnn_layers=1, hidden_size=256, sequence_length=64):
+    def __init__(self, observation_space, action_space, device, num_envs=1, num_rnn_layers=1, hidden_size=128, sequence_length=64):
         Model.__init__(self, observation_space, action_space, device)
         DeterministicMixin.__init__(self)
 
@@ -101,9 +117,9 @@ class Value(DeterministicMixin, Model):
         self.hidden_size = hidden_size
         self.sequence_length = sequence_length
 
-        self.feature_extractor = CNNFeatureExtractor(observation_space, output_dim=256)
+        self.feature_extractor = CNNFeatureExtractor(observation_space, output_dim=128)
         self.rnn = nn.GRU(
-            input_size=256,
+            input_size=128,
             hidden_size=self.hidden_size,
             num_layers=self.num_rnn_layers,
             batch_first=True)
@@ -119,10 +135,24 @@ class Value(DeterministicMixin, Model):
     def compute(self, inputs, role):
         features = self.feature_extractor(inputs["states"])
         hidden_states = inputs["rnn"][0]
-        rnn_input = features.view(-1, 1, features.shape[-1])
-        rnn_output, new_hidden_states = self.rnn(rnn_input, hidden_states)
-        value = self.value_net(rnn_output.squeeze(1))
+
+        # Training mode: process full sequences
+        if self.training:
+            rnn_input = features.view(-1, self.sequence_length, features.shape[-1])
+            hidden_states = hidden_states.view(self.num_rnn_layers, -1, self.sequence_length, self.hidden_size)
+            hidden_states = hidden_states[:, :, 0, :].contiguous()
+            
+            rnn_output, new_hidden_states = self.rnn(rnn_input, hidden_states)
+            rnn_output = torch.flatten(rnn_output, start_dim=0, end_dim=1)
+        # Evaluation/Rollout mode: process one step at a time
+        else:
+            rnn_input = features.view(-1, 1, features.shape[-1])
+            rnn_output, new_hidden_states = self.rnn(rnn_input, hidden_states)
+            rnn_output = rnn_output.squeeze(1)
+
+        value = self.value_net(rnn_output)
         return value, {"rnn": [new_hidden_states]}
+
 
 # 🔧 Instantiate models
 models = {}
@@ -149,9 +179,8 @@ agent = MAPPO_CNN_RNN(
 )
 
 # 💡 Load the trained agent's checkpoint
-# TODO: Replace with the actual path to your trained agent file
 try:
-    agent.load("runs/torch/Pogema_MAPPO_CNN_RNN/25-08-19_21-16-08-297397_MAPPO_CNN_RNN/checkpoints/best_agent.pt")
+    agent.load("runs\\torch\\Pogema_MAPPO_CNN_RNN\\25-08-28_00-09-05-808109_MAPPO_CNN_RNN\\checkpoints\\best_agent.pt")
 except FileNotFoundError:
     print("Checkpoint not found. Running with randomly initialized agent.")
 
@@ -171,6 +200,8 @@ while not overall_done and step < max_steps:
 
     # Step the environment
     obs, reward, terminated, truncated, _ = env.step(actions)
+    print(terminated, truncated, reward)
+
 
     # Check if all agents are done
     all_terminated = all(terminated.values())
