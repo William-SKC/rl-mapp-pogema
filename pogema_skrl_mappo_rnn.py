@@ -203,7 +203,7 @@ agent = MAPPO_CNN_RNN(
 )
 
 # 🏋️ Configure & Start Training
-cfg_trainer = {"timesteps": 3000000, "headless": True}
+cfg_trainer = {"timesteps": 2000000, "headless": True}
 trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent)
 
 print("🚀 Starting MAPPO RNN Training...")

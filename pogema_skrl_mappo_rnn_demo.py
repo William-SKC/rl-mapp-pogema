@@ -180,7 +180,7 @@ agent = MAPPO_CNN_RNN(
 
 # 💡 Load the trained agent's checkpoint
 try:
-    agent.load("runs\\torch\\Pogema_MAPPO_CNN_RNN\\25-08-28_00-09-05-808109_MAPPO_CNN_RNN\\checkpoints\\best_agent.pt")
+    agent.load("runs\\torch\\Pogema_MAPPO_CNN_RNN\\25-08-28_15-07-09-087742_MAPPO_CNN_RNN\\checkpoints\\best_agent.pt")
 except FileNotFoundError:
     print("Checkpoint not found. Running with randomly initialized agent.")
 
@@ -200,7 +200,6 @@ while not overall_done and step < max_steps:
 
     # Step the environment
     obs, reward, terminated, truncated, _ = env.step(actions)
-    print(terminated, truncated, reward)
 
 
     # Check if all agents are done
